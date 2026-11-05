@@ -1,0 +1,22 @@
+# Theme tokens lifted from Confluence's design language ("Saniti"):
+# a near-black canvas, one tonal step for panels, graphite hairlines and a
+# single coral accent that is reserved for the interactive layer. The data
+# colours (green favourable / red unfavourable) are applied per chart in
+# ui/theme.py, never here — Streamlit's primaryColor is chrome only.
+[theme]
+base = "dark"
+primaryColor = "#f36458"
+backgroundColor = "#0b0b0b"
+secondaryBackgroundColor = "#161616"
+textColor = "#ffffff"
+linkColor = "#f36458"
+borderColor = "#2b2b2b"
+baseRadius = "small"
+font = "sans-serif"
+baseFontSize = 14
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false

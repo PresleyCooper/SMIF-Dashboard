@@ -1,0 +1,18 @@
+# Fund data: the ledger, the price cache and the source workbooks.
+# Deliberately not committed — this repository is public and the holdings,
+# cost bases and transaction history are the fund's, not the code's. A fresh
+# clone is bootstrapped with scripts/bootstrap.py.
+data/
+!data/.gitkeep
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+*.egg-info/
+.DS_Store
+Thumbs.db
+.streamlit/secrets.toml
