@@ -16,3 +16,7 @@ env/
 .DS_Store
 Thumbs.db
 .streamlit/secrets.toml
+
+# gh staged here only because the Terminal panel and the agent shell are in
+# different filesystem namespaces; the project folder is the one they share.
+.tools/
