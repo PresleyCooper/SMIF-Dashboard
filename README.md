@@ -8,6 +8,12 @@ Seventeen years and ~3,080 transactions go in. Out come time-weighted returns
 for each sleeve, correlation matrices, a point-in-time factor exposure against
 the S&P 500, and a place to keep the ledger current.
 
+> **Status.** The engine is complete, reconciled to the custodian and covered by
+> 159 tests — `python scripts/check.py` prints the full validation and return
+> report today. The Streamlit front end is in progress: the design system
+> (`ui/theme.py`, `ui/charts.py`) is in place, the pages are not yet, so there
+> is no `app.py` to run until they land.
+
 ## What it answers
 
 | Page | Question |
@@ -57,7 +63,7 @@ prices for every ticker the fund has ever held into `data/cache/prices.parquet`.
 It takes a few minutes once; after that a refresh only asks for the new days.
 
 ```bash
-streamlit run app.py
+streamlit run app.py          # once the pages land — see Status above
 ```
 
 ```bash
