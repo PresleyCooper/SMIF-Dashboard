@@ -69,6 +69,15 @@ It takes a few minutes once; after that a refresh only asks for the new days.
 streamlit run app.py
 ```
 
+Or double-click **SMIF Dashboard.bat** (or `.vbs`, which shows no console
+window). It starts the server if it is not already running, waits for the port
+to answer, then opens your browser — a bookmark alone will not work, because
+Streamlit is a server rather than a file. For a Desktop shortcut:
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1
+```
+
 The factor page needs one more crawl, which takes about seven minutes and is
 then cached for a month:
 
