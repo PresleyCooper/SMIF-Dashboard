@@ -161,6 +161,122 @@ def interpolated_positions(book) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+COLUMN_ALIASES = {
+    "symbol": {"symbol", "ticker", "sym", "security", "security symbol"},
+    "quantity": {"quantity", "shares", "qty", "units", "share quantity"},
+    "price": {"price", "close", "last price", "market price", "unit price"},
+    "value": {"value", "market value", "mkt value", "amount", "position value"},
+}
+
+
+def read_position_snapshot(source, sheet=None) -> pd.DataFrame:
+    """
+    Read an uploaded custodian position file into symbol / quantity / price /
+    value.
+
+    Column names are matched case-insensitively against a small alias table
+    rather than fixed, because every custodian spells this differently and the
+    alternative is telling a treasurer to rename columns before the app will
+    look at their file. Rows without a symbol (subtotals, totals, headers that
+    survived an export) are dropped: they are not positions.
+    """
+    if hasattr(source, "name") and str(source.name).lower().endswith(
+            (".csv", ".txt")):
+        df = pd.read_csv(source)
+    else:
+        df = pd.read_excel(source, sheet_name=sheet or 0)
+    df.columns = [str(c).strip() for c in df.columns]
+
+    found = {}
+    for target, names in COLUMN_ALIASES.items():
+        for c in df.columns:
+            if c.strip().lower() in names:
+                found[target] = c
+                break
+    if "symbol" not in found:
+        raise ValueError(
+            "No symbol column found. Expected one of: "
+            + ", ".join(sorted(COLUMN_ALIASES["symbol"])))
+    if "quantity" not in found and "value" not in found:
+        raise ValueError(
+            "Need a quantity or a value column to reconcile against.")
+
+    out = pd.DataFrame({"symbol": df[found["symbol"]]})
+    for target in ("quantity", "price", "value"):
+        out[target] = (pd.to_numeric(df[found[target]], errors="coerce")
+                       if target in found else np.nan)
+    out["symbol"] = out["symbol"].astype("string").str.strip().str.upper()
+    out = out[out["symbol"].notna() & (out["symbol"] != "")]
+    out = out[~out["symbol"].str.contains("TOTAL|SUBTOTAL", na=False)]
+    if "value" in found and "quantity" in found and out["value"].isna().all():
+        out["value"] = out["quantity"] * out["price"]
+    return out.reset_index(drop=True)
+
+
+def reconcile_positions(book, snapshot: pd.DataFrame, as_of=None) -> pd.DataFrame:
+    """
+    Rebuilt positions against an uploaded snapshot, position by position.
+
+    Lines present on only one side are kept with zero on the other, because a
+    position the fund thinks it holds and the custodian does not is the single
+    most important row in the table and dropping it would hide it.
+    """
+    as_of = pd.Timestamp(as_of) if as_of is not None else book.days[-1]
+    day = book.days[book.days <= as_of][-1]
+
+    rebuilt = book.holdings_on(day)
+    shares = rebuilt["shares"].to_dict()
+    values = rebuilt["value"].to_dict()
+
+    # The sweep balance is a cash POSITION to a custodian and a separate
+    # balance to the engine. Without it on the rebuilt side the comparison is
+    # not like for like, and the custodian's CASH line reconciles against
+    # nothing while reporting a share difference of zero.
+    sweep = float(book.cash.loc[day])
+    if abs(sweep) > 1e-9:
+        shares["CASH"] = shares.get("CASH", 0.0)
+        values["CASH"] = values.get("CASH", 0.0) + sweep
+
+    snap = snapshot.set_index("symbol")
+    rows = []
+    for sym in sorted(set(shares) | set(snap.index)):
+        r_q = float(shares.get(sym, 0.0))
+        r_v = float(values.get(sym, 0.0))
+        s_q = float(snap["quantity"].get(sym, float("nan")))
+        s_v = float(snap["value"].get(sym, float("nan")))
+        if np.isnan(s_v) and not np.isnan(s_q) and sym in snap.index:
+            price = float(snap["price"].get(sym, float("nan")))
+            s_v = s_q * price if not np.isnan(price) else float("nan")
+
+        share_diff = r_q - (0.0 if np.isnan(s_q) else s_q)
+        value_diff = r_v - (0.0 if np.isnan(s_v) else s_v)
+        rows.append({
+            "symbol": sym,
+            "rebuilt_shares": r_q,
+            "custodian_shares": s_q,
+            "share_diff": share_diff,
+            "rebuilt_value": r_v,
+            "custodian_value": s_v,
+            "value_diff": value_diff,
+            "only_in": ("rebuild" if sym not in snap.index
+                        else "snapshot" if sym not in shares else ""),
+        })
+    out = pd.DataFrame(rows)
+    # A line matches only if BOTH the share count and the value agree. Share
+    # count alone would pass a cash position — which has no share count on
+    # either side — however far apart the two dollar figures were.
+    #
+    # The value test is relative, not absolute: the custodian prices off a
+    # different feed, so an eleven-cent disagreement on a $16,000 position is
+    # noise and flagging it buries the lines that matter. A dollar floor keeps
+    # small positions from passing on a percentage.
+    tolerance = np.maximum(1.0, 0.0005 * out["custodian_value"].abs().fillna(0.0))
+    out["matches"] = ((out["share_diff"].abs() < 1e-4)
+                      & (out["value_diff"].abs() <= tolerance))
+    out["as_of"] = day
+    return out.sort_values(["matches", "symbol"]).reset_index(drop=True)
+
+
 def report(book, tx: pd.DataFrame, holdings: pd.DataFrame,
            subtotals: pd.Series) -> dict:
     """Everything above in one dict — what the Methodology page renders."""
