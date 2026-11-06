@@ -26,6 +26,8 @@ page is worse than a duplicated hex code.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import pandas as pd
 import streamlit as st
 
@@ -70,10 +72,8 @@ SLEEVE_COLOR = {
 
 def _css() -> str:
     return f"""
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
 :root {{
   --bg: {BG}; --surface: {SURFACE}; --surface-2: {SURFACE_2};
   --border: {BORDER}; --border-2: {BORDER_2};
@@ -86,6 +86,13 @@ def _css() -> str:
 
 html, body, [class*="st-"], .stMarkdown, button, input, select, textarea {{
   font-family: var(--font-body);
+}}
+/* ...but NOT the icon spans. Streamlit draws its nav icons as ligatures in the
+   Material Symbols font, so a blanket body-font override turns every icon back
+   into the literal word "dashboard" or "trending_up", overlapping the label. */
+span[data-testid="stIconMaterial"], .material-icons, .material-icons-outlined,
+[class*="material-symbols"], [data-testid*="stIconMaterial"] {{
+  font-family: 'Material Symbols Rounded', 'Material Icons' !important;
 }}
 .stApp {{ background: var(--bg); }}
 
@@ -120,6 +127,12 @@ section[data-testid="stSidebarNav"] ul li a[aria-current="page"] {{
   box-shadow: inset 3px 0 0 0 var(--accent); }}
 
 /* ── the editorial card: flat, 1px hairline, no shadow ───────────────── */
+/* Applied to Streamlit's own bordered container rather than to a hand-written
+   <div>: each st.markdown call lands in its own DOM container, so an unclosed
+   wrapper div auto-closes and nests nothing. */
+div[data-testid="stVerticalBlockBorderWrapper"] {{
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px 6px; }}
 .cf-panel {{
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 16px 18px; margin-bottom: 14px; }}
@@ -232,8 +245,19 @@ footer, #MainMenu, header[data-testid="stHeader"] {{ visibility: hidden; }}
 
 
 def apply_theme() -> None:
-    """Inject the design system. Called once per page, before anything renders."""
-    st.markdown(_css(), unsafe_allow_html=True)
+    """
+    Inject the design system. Called once per page, before anything renders.
+
+    Blank lines are stripped first, and this is not cosmetic: st.markdown parses
+    its input as Markdown before honouring the HTML, and in Markdown a blank
+    line ENDS a raw-HTML block. Leave them in and everything after the first one
+    is treated as prose — the stylesheet renders as visible text on the page and
+    only the rules above that first gap take effect. Fonts come in through an
+    @import rather than <link> tags for the same reason: the sanitizer keeps
+    <style>, but drops <link>.
+    """
+    css = "\n".join(line for line in _css().splitlines() if line.strip())
+    st.markdown(css, unsafe_allow_html=True)
 
 
 def sidebar_brand(subtitle: str = "KSU Student Managed Investment Fund") -> None:
@@ -285,13 +309,18 @@ def eyebrow(title: str, note: str = "") -> str:
     return f'<div class="cf-eyebrow">{title}{tail}</div>'
 
 
-def panel_open(title: str = "", note: str = "") -> None:
-    st.markdown(f'<div class="cf-panel">{eyebrow(title, note) if title else ""}',
-                unsafe_allow_html=True)
+@contextmanager
+def panel(title: str = "", note: str = ""):
+    """
+    A Confluence card. Use as `with theme.panel("Growth"): ...`.
 
-
-def panel_close() -> None:
-    st.markdown("</div>", unsafe_allow_html=True)
+    Streamlit's bordered container does the nesting; the CSS above gives it the
+    flat hairline look, and the mono eyebrow goes in as its first child.
+    """
+    with st.container(border=True):
+        if title:
+            st.markdown(eyebrow(title, note), unsafe_allow_html=True)
+        yield
 
 
 def tiles(items: list[dict]) -> None:

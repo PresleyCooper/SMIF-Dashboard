@@ -158,10 +158,18 @@ class PriceStore:
         todo = []
         for t in tickers:
             last = None if force else self.last_date(t)
-            if last is not None and last >= end:
+            if last is not None and last > end:
                 continue
+            # Re-fetch the last cached day rather than starting after it. Yahoo
+            # serves a moving intraday quote for a session in progress, so a
+            # refresh run during market hours writes a PARTIAL bar. Starting at
+            # last + 1 would leave that partial price in the cache for ever,
+            # quietly wrong by however much the afternoon moved. Overlapping by
+            # one day lets the settled close overwrite it (_save keeps the last
+            # row for a (ticker, date) pair, and new rows are concatenated after
+            # the existing ones).
             start = (config.PRICE_START if last is None
-                     else (last + pd.Timedelta(days=1)).strftime("%Y-%m-%d"))
+                     else last.strftime("%Y-%m-%d"))
             todo.append((t, start))
 
         for i in range(0, len(todo), CHUNK):
@@ -192,8 +200,16 @@ class PriceStore:
 
 
 def _download(tickers: list[str], start: str, end: str) -> tuple[dict, list]:
-    """One yfinance call. Returns ({ticker: frame}, [tickers that gave nothing])."""
+    """
+    One yfinance call. Returns ({ticker: frame}, [tickers that gave nothing]).
+
+    Bars dated today are discarded. During market hours Yahoo returns the
+    session's running quote as if it were a close, and a price that changes
+    every time the page is refreshed cannot be reconciled against anything.
+    The fund is valued on settled closes only.
+    """
     import yfinance as yf
+    today = config.today()
     try:
         raw = yf.download(tickers, start=start, end=end, auto_adjust=False,
                           actions=True, progress=False, group_by="ticker",
@@ -213,6 +229,7 @@ def _download(tickers: list[str], start: str, end: str) -> tuple[dict, list]:
                 "split": x.get("Stock Splits",
                                pd.Series(0.0, index=x.index)).to_numpy(dtype=float),
             }).dropna(subset=["close"])
+            df = df[df["date"] < today]
             if df.empty:
                 bad.append(t)
             else:
