@@ -36,12 +36,13 @@ smif/            the engine — no Streamlit import anywhere in here
   nav.py           the daily book: shares, prices, sleeve values, cash, flows
   returns.py       time-weighted returns, periods, drawdown, calendar years
   correlations.py  return series, correlation, clustering, beta
+  factors.py       cross-sectional z-scores against the S&P 500
   workbook.py      holdings, the custodian snapshot and the S&P 500 constituents
   validate.py      the four reconciliation checks
   engine.py        the one call that runs the pipeline in order
 ui/              everything Streamlit, styled after the Confluence design system
 tests/           201 tests: the rules on synthetic ledgers, then the real regression
-scripts/         bootstrap and a command-line check
+scripts/         bootstrap, the factor crawl, and a command-line check
 ```
 
 The engine holds no Streamlit import, so it can be tested on its own and a test
