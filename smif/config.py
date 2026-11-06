@@ -127,6 +127,14 @@ NO_YAHOO_DATA = {
 # DRIP top-up or a zero-proceeds write-off.
 ANCHOR_MIN_QUANTITY = 0.9
 
+# Below this a line is a remnant, not a position. A dozen long-exited names
+# carry sub-share leftovers worth a dollar or two — 0.02 of a Diamond Offshore,
+# -0.01 of a Synovus — which are real in the rebuild and swept by the
+# custodian. They belong in the reconciliation, where they are evidence, and
+# nowhere else: counted as holdings they turn 38 equity positions into 50, and
+# correlated as holdings they add rows of noise to the matrix.
+MATERIAL_POSITION_VALUE = 100.0
+
 # Questcor's exit was cash plus Mallinckrodt stock, so its last "price" has to
 # be constructed: 30 QCOR shares became $900 plus 26.91 MNK shares.
 QCOR_EXIT = {

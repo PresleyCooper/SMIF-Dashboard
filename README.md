@@ -9,9 +9,9 @@ for each sleeve, correlation matrices, a point-in-time factor exposure against
 the S&P 500, and a place to keep the ledger current.
 
 > **Status.** The engine is complete, reconciled to the custodian and covered by
-> 173 tests. `streamlit run app.py` works; the **Overview** and **Returns**
-> pages are live. Correlations, Factor exposure, Transactions and Methodology
-> are still placeholders. `python scripts/check.py` prints the full validation and
+> 201 tests. `streamlit run app.py` works; the **Overview**, **Returns** and
+> **Correlations** pages are live. Factor exposure, Transactions and
+> Methodology are still placeholders. `python scripts/check.py` prints the full validation and
 > return report in the meantime.
 
 ## What it answers
@@ -35,11 +35,12 @@ smif/            the engine — no Streamlit import anywhere in here
   prices.py        yfinance with a parquet cache, the split un-adjust, fallbacks
   nav.py           the daily book: shares, prices, sleeve values, cash, flows
   returns.py       time-weighted returns, periods, drawdown, calendar years
+  correlations.py  return series, correlation, clustering, beta
   workbook.py      holdings, the custodian snapshot and the S&P 500 constituents
   validate.py      the four reconciliation checks
   engine.py        the one call that runs the pipeline in order
 ui/              everything Streamlit, styled after the Confluence design system
-tests/           173 tests: the rules on synthetic ledgers, then the real regression
+tests/           201 tests: the rules on synthetic ledgers, then the real regression
 scripts/         bootstrap and a command-line check
 ```
 

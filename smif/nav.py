@@ -68,14 +68,23 @@ class Book:
     def securities_value(self) -> pd.Series:
         return self.mv.sum(axis=1)
 
-    def holdings_on(self, when=None) -> pd.DataFrame:
-        """Share count, price and value per symbol on one day, zeros dropped."""
+    def holdings_on(self, when=None, min_value: float = 0.0) -> pd.DataFrame:
+        """
+        Share count, price and value per symbol on one day, zeros dropped.
+
+        `min_value` drops remnants (see config.MATERIAL_POSITION_VALUE). It
+        defaults to nothing, because the reconciliation needs to see every
+        leftover share; the UI passes a floor so a $1.35 residue of a company
+        the fund exited in 2016 is not presented as a position.
+        """
         d = self.days[-1] if when is None else self.days[self.days <= pd.Timestamp(when)][-1]
         q = self.shares.loc[d]
         q = q[q.abs() > 1e-6]
         out = pd.DataFrame({"shares": q,
                             "price": self.prices.loc[d, q.index],
                             "value": self.mv.loc[d, q.index]})
+        if min_value > 0:
+            out = out[out["value"].abs() >= min_value]
         out["sleeve"] = [sleeve_of(s) for s in out.index]
         out["weight"] = out["value"] / out["value"].sum()
         return out.sort_values("value", ascending=False)

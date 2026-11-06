@@ -180,11 +180,11 @@ with theme.panel("Sleeves today"):
             "Sleeve": config.SLEEVE_LABEL[key],
             "Value": theme.money(v),
             "Weight": f"{v / nav * 100:.1f}%",
-            # by value, not by share count: a dozen long-exited names carry a
-            # sub-share remnant worth cents, and counting those turns 38 equity
-            # positions into 50
+            # by value, against the shared materiality floor: a dozen
+            # long-exited names carry sub-share remnants worth a dollar or two
             "Holdings": int((book.mv[book.sleeve_members[key]].iloc[-1].abs()
-                             > 1.0).sum()) if book.sleeve_members[key] else 0,
+                             >= config.MATERIAL_POSITION_VALUE).sum())
+            if book.sleeve_members[key] else 0,
             "Since": f"{t.base:%b %Y}" if t else "—",
             "Return since": theme.pct(t.index.iloc[-1] - 1, 2) if t else "—",
             "Benchmark": (t.benchmark_name or "—") if t else "—",
