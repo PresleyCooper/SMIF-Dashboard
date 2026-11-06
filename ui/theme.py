@@ -61,9 +61,13 @@ GRID = "rgba(255,255,255,0.07)"
 ZERO = "rgba(255,255,255,0.16)"
 SPIKE = "#8a8a8a"
 
+# One hue per sleeve. Total keeps the coral accent because it is the fund's
+# headline number; equity gets its own blue rather than sharing coral, since
+# the two lines sit within a few percent of each other for most of the history
+# and in one colour they are simply indistinguishable.
 SLEEVE_COLOR = {
     "total": ACCENT,
-    "equity": ACCENT,
+    "equity": BLUE,
     "fixed_income": CYAN,
     "cash": YELLOW,
     "benchmark": GRAY,

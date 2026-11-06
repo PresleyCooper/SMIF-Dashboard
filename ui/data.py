@@ -32,7 +32,25 @@ def _mtime(path: Path) -> float:
         return 0.0
 
 
-def _fingerprint() -> tuple[float, float]:
+def _engine_version() -> float:
+    """
+    The newest modification time in the engine package.
+
+    The data fingerprint cannot see a change to the CODE. Streamlit's
+    cache_data notices when the decorated function's own body changes, but
+    these functions only delegate — the arithmetic lives in smif/, and editing
+    smif/returns.py leaves every cached frame in place. That is how a table
+    cached before a column existed survived long enough to raise KeyError on
+    the page. In production these mtimes are fixed and this costs a few stat
+    calls; in development it means an engine edit invalidates the UI.
+    """
+    try:
+        return max(_mtime(p) for p in Path(config.__file__).parent.glob("*.py"))
+    except ValueError:
+        return 0.0
+
+
+def _fingerprint() -> tuple[float, float, float]:
     """
     What has to change for a cached number to be wrong.
 
@@ -42,7 +60,7 @@ def _fingerprint() -> tuple[float, float]:
     silently disables the whole invalidation scheme and the app keeps serving
     yesterday's returns after a transaction is saved.
     """
-    return _mtime(config.LEDGER_DB), _mtime(config.PRICE_CACHE)
+    return _mtime(config.LEDGER_DB), _mtime(config.PRICE_CACHE), _engine_version()
 
 
 # ── readiness ─────────────────────────────────────────────────────────────────
@@ -96,7 +114,7 @@ def require_data() -> dict:
 # ── the analytics object ──────────────────────────────────────────────────────
 
 @st.cache_resource(show_spinner="Rebuilding the fund's daily history…")
-def _load(fingerprint: tuple[float, float], end: str | None) -> engine.Analytics:
+def _load(fingerprint: tuple[float, float, float], end: str | None) -> engine.Analytics:
     return engine.load(end=pd.Timestamp(end) if end else None)
 
 
@@ -116,7 +134,7 @@ def refresh() -> None:
 # ── derived tables ────────────────────────────────────────────────────────────
 
 @st.cache_data(show_spinner=False)
-def _period_table(fingerprint: tuple[float, float], which: str,
+def _period_table(fingerprint: tuple[float, float, float], which: str,
                   end: str | None) -> pd.DataFrame:
     a = analytics(end)
     track = a.tracks.get(which)
@@ -131,7 +149,7 @@ def period_table(which: str, end=None) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def _calendar_table(fingerprint: tuple[float, float], which: str,
+def _calendar_table(fingerprint: tuple[float, float, float], which: str,
                     end: str | None) -> pd.DataFrame:
     a = analytics(end)
     track = a.tracks.get(which)
@@ -146,7 +164,7 @@ def calendar_table(which: str, end=None) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner="Reconciling against the custodian…")
-def _validation(fingerprint: tuple[float, float], end: str | None) -> dict:
+def _validation(fingerprint: tuple[float, float, float], end: str | None) -> dict:
     return analytics(end).validation()
 
 

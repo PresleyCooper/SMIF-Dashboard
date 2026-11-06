@@ -9,9 +9,9 @@ for each sleeve, correlation matrices, a point-in-time factor exposure against
 the S&P 500, and a place to keep the ledger current.
 
 > **Status.** The engine is complete, reconciled to the custodian and covered by
-> 173 tests. `streamlit run app.py` works and the **Overview** page is live;
-> Returns, Correlations, Factor exposure, Transactions and Methodology are
-> still placeholders. `python scripts/check.py` prints the full validation and
+> 173 tests. `streamlit run app.py` works; the **Overview** and **Returns**
+> pages are live. Correlations, Factor exposure, Transactions and Methodology
+> are still placeholders. `python scripts/check.py` prints the full validation and
 > return report in the meantime.
 
 ## What it answers

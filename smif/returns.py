@@ -214,17 +214,14 @@ def period_base(index: pd.Series, label: str, offset, end: pd.Timestamp) -> pd.T
     return on_or_before[-1] if len(on_or_before) else index.index[0]
 
 
-def period_stats(track: Track, label: str, offset, end: pd.Timestamp | None = None) -> dict:
+def _stats_between(track: Track, base: pd.Timestamp, end: pd.Timestamp,
+                   label: str, annualize: bool) -> dict:
+    """Every statistic the app reports, over one window. The only place the
+    arithmetic lives, so a custom range and a named period cannot disagree."""
     idx = track.index
-    end = pd.Timestamp(end) if end is not None else idx.index[-1]
-    end = idx.index[idx.index <= end][-1]
-    base = period_base(idx, label, offset, end)
-
     a = idx.loc[base:end]
     years = (end - base).days / DAYS_PER_YEAR
     cum = float(a.iloc[-1] / a.iloc[0] - 1)
-    nominal = PERIOD_YEARS.get(label)
-    annualize = years >= 1.0 or (nominal is not None and nominal >= 1)
 
     out = {
         "period": label, "start": base, "end": end, "years": years,
@@ -233,6 +230,7 @@ def period_stats(track: Track, label: str, offset, end: pd.Timestamp | None = No
         "mdd": max_drawdown(a),
         "vol": annualized_vol(track.daily.loc[base:end].iloc[1:]),
         "bench_cum": None, "bench_ann": None, "bench": track.benchmark_name,
+        "excess": None,
     }
     if track.benchmark is not None:
         b = track.benchmark.loc[base:end].dropna()
@@ -241,7 +239,41 @@ def period_stats(track: Track, label: str, offset, end: pd.Timestamp | None = No
             out["bench_cum"] = bc
             out["bench_ann"] = (((1 + bc) ** (1 / years) - 1)
                                 if (annualize and years > 0) else None)
+            out["excess"] = cum - bc
     return out
+
+
+def period_stats(track: Track, label: str, offset, end: pd.Timestamp | None = None) -> dict:
+    idx = track.index
+    end = pd.Timestamp(end) if end is not None else idx.index[-1]
+    end = idx.index[idx.index <= end][-1]
+    base = period_base(idx, label, offset, end)
+    years = (end - base).days / DAYS_PER_YEAR
+    nominal = PERIOD_YEARS.get(label)
+    annualize = years >= 1.0 or (nominal is not None and nominal >= 1)
+    return _stats_between(track, base, end, label, annualize)
+
+
+def range_stats(track: Track, start, end=None) -> dict | None:
+    """
+    The same statistics over an arbitrary window, for the custom date picker.
+
+    Both ends snap to the last close on or before the date asked for, so a
+    weekend boundary measures a real session instead of silently shifting. None
+    when the track does not reach the window at all — a fixed income sleeve
+    bought in September has nothing to say about 2015, and inventing a zero
+    would be worse than saying so.
+    """
+    idx = track.index
+    start, end = pd.Timestamp(start), pd.Timestamp(end or idx.index[-1])
+    within = idx.index[(idx.index >= start) & (idx.index <= end)]
+    if len(within) < 2:
+        return None
+    on_or_before = idx.index[idx.index <= start]
+    base = on_or_before[-1] if len(on_or_before) else within[0]
+    last = idx.index[idx.index <= end][-1]
+    years = (last - base).days / DAYS_PER_YEAR
+    return _stats_between(track, base, last, "Custom", years >= 1.0)
 
 
 def period_table(track: Track, end=None, periods=None) -> pd.DataFrame:
