@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections import Counter
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 

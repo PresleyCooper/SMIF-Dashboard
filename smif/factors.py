@@ -493,6 +493,54 @@ def holding_metrics(snapshot: dict, tickers: list[str]) -> dict[str, dict]:
     return {t: m.get(t, {}) for t in tickers}
 
 
+def benchmark_exposure(universe: dict[str, dict],
+                       index_weights: dict[str, float]) -> dict:
+    """
+    The index's OWN factor scores, at its real capitalisation weights.
+
+    This exists because "the S&P 500 is zero by construction" is false, and
+    believing it is the single most misleading thing this chart can do. The
+    z-distribution is computed across constituents, each one observation, so
+    what scores zero is the AVERAGE CONSTITUENT — an equal-weighted index. The
+    actual S&P 500 is capitalisation-weighted, and on this data it scores
+    Size +1.75: the market itself is enormously large-cap by the standard of
+    its own median member.
+
+    So a fund at Size +1.78 is not carrying a vast size tilt. It is carrying
+    +0.03 against the thing it is benchmarked to, and reading the first number
+    as the second inverts the conclusion.
+    """
+    held = {t: universe[t] for t in index_weights if t in universe}
+    return exposure({t: w for t, w in index_weights.items() if t in universe},
+                    held, universe)
+
+
+def active_exposure(fund: dict, benchmark: dict) -> dict:
+    """
+    Fund minus benchmark, metric by metric — exposure relative to the index.
+
+    Coverage, contributors and the metric definitions come from the fund side
+    unchanged; only the scores are differenced. A metric either side cannot
+    score stays None rather than becoming the other side's value negated.
+    """
+    bench_metrics = {m["key"]: m["z"] for m in benchmark.get("metrics", [])}
+    bench_factors = {f["factor"]: f["z"] for f in benchmark.get("factors", [])}
+
+    metrics = []
+    for m in fund.get("metrics", []):
+        b = bench_metrics.get(m["key"])
+        z = None if (m["z"] is None or b is None) else round(m["z"] - b, 3)
+        metrics.append({**m, "z": z, "benchmark_z": b, "absolute_z": m["z"]})
+
+    factors = []
+    for f in fund.get("factors", []):
+        b = bench_factors.get(f["factor"])
+        z = None if (f["z"] is None or b is None) else round(f["z"] - b, 3)
+        factors.append({**f, "z": z, "benchmark_z": b, "absolute_z": f["z"]})
+
+    return {**fund, "metrics": metrics, "factors": factors, "relative": True}
+
+
 FUND_QUOTE_TYPES = {"ETF", "MUTUALFUND", "MONEYMARKET", "INDEX"}
 
 

@@ -21,7 +21,6 @@ Two things the page is careful to say out loud:
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -61,7 +60,37 @@ stocks = [s for s in holdings.index if s not in funds]
 stock_weights = {s: float(holdings.loc[s, "value"]) / total_value for s in stocks}
 fund_pct = sum(float(holdings.loc[s, "value"]) for s in funds) / total_value * 100
 
-result = fx.exposure(stock_weights, fx.holding_metrics(snapshot, stocks), universe)
+absolute = fx.exposure(stock_weights, fx.holding_metrics(snapshot, stocks),
+                       universe)
+
+# The index's own scores, at its real capitalisation weights. Without these the
+# chart invites the reader to treat "vs the average constituent" as "vs the
+# S&P 500", which on Size alone is the difference between +1.78 and +0.03.
+index_weights = {}
+try:
+    from smif import workbook
+    sp = workbook.read_sp500()
+    index_weights = {r.symbol: float(r.weight) for r in sp.itertuples()
+                     if r.symbol in universe}
+except Exception:
+    index_weights = {}
+
+benchmark = (fx.benchmark_exposure(universe, index_weights)
+             if len(index_weights) >= config.FACTOR_MIN_UNIVERSE else None)
+
+BASIS = {
+    "Active — vs the S&P 500": "active",
+    "Absolute — vs the average constituent": "absolute",
+}
+basis = "absolute"
+if benchmark is not None:
+    label = st.segmented_control(
+        "Compared to", list(BASIS), default="Active — vs the S&P 500",
+        key="fx_basis", label_visibility="collapsed")
+    basis = BASIS.get(label or "Active — vs the S&P 500", "active")
+
+result = (fx.active_exposure(absolute, benchmark)
+          if (basis == "active" and benchmark is not None) else absolute)
 
 age = fx.snapshot_age_days(snapshot)
 stale = fx.is_stale(snapshot)
@@ -110,13 +139,33 @@ with theme.panel(
     svg = charts.factor_exposure_svg(result, show_metrics=show_metrics)
     st.markdown(f'<div style="overflow-x:auto">{svg}</div>',
                 unsafe_allow_html=True)
+    if basis == "active":
+        basis_note = (
+            "<strong>Zero is the S&amp;P 500 itself</strong>, at its real "
+            "capitalisation weights. What the z-scores measure on their own is "
+            "distance from the AVERAGE CONSTITUENT, and the index is nothing "
+            "like its average constituent — it scores "
+            f"{benchmark['factors'][0]['z']:+.2f} on Size by that yardstick. "
+            "These bars subtract it, so what is left is the fund's tilt "
+            "against the thing it is benchmarked to.")
+    else:
+        basis_note = (
+            "<strong>Zero is the average S&amp;P 500 constituent</strong>, not "
+            "the index. Each constituent is one observation in the "
+            "distribution, so the cap-weighted index itself is not at zero — "
+            f"it sits at {benchmark['factors'][0]['z']:+.2f} on Size. Switch to "
+            "Active to measure against the index instead."
+            if benchmark is not None else
+            "<strong>Zero is the average S&amp;P 500 constituent.</strong> The "
+            "index's own weights are unavailable, so the cap-weighted "
+            "comparison cannot be shown.")
     theme.hover_strip(
         "Up means larger, higher quality, faster growing, cheaper and stronger "
         "momentum — the intuitive convention, not the academic one (the "
-        "academic size factor is the inverse of this). The S&P 500 is zero by "
-        "construction. <strong>Hover any bar</strong> for its definition, its "
-        "coverage and the five holdings contributing most. Size and Momentum "
-        "are coloured neutrally: bigger and faster are not virtues.")
+        "academic size factor is the inverse of this). " + basis_note
+        + " <strong>Hover any bar</strong> for its definition, its coverage and "
+        "the five holdings contributing most. Size and Momentum are coloured "
+        "neutrally: bigger and faster are not virtues.")
 
 # ── the numbers behind the chart ──────────────────────────────────────────────
 with theme.panel("Metric by metric",
@@ -126,17 +175,23 @@ with theme.panel("Metric by metric",
         top = " · ".join(f"{c['ticker']} {c['z']:+.1f}" for c in m["top"])
         rows.append({
             "Factor": m["factor"], "Metric": m["label"],
-            "z": m["z"], "Coverage": (m["coverage"] or 0) / 100.0,
+            "z": m["z"],
+            "Fund": m.get("absolute_z", m["z"]),
+            "S&P 500": m.get("benchmark_z"),
+            "Coverage": (m["coverage"] or 0) / 100.0,
             "Names": m["n"], "Biggest contributors": top or "—",
         })
     table = pd.DataFrame(rows)
-    numeric = table[["z", "Coverage"]].apply(pd.to_numeric, errors="coerce")
+    num_cols = ["z", "Fund", "S&P 500", "Coverage"]
+    numeric = table[num_cols].apply(pd.to_numeric, errors="coerce")
     text = table.copy()
-    text["z"] = numeric["z"].map(lambda v: "—" if pd.isna(v) else f"{v:+.2f}")
+    for c in ("z", "Fund", "S&P 500"):
+        text[c] = numeric[c].map(lambda v: "—" if pd.isna(v) else f"{v:+.2f}")
+    text = text.rename(columns={"z": "Active" if basis == "active" else "Score"})
     text["Coverage"] = numeric["Coverage"].map(
         lambda v: "—" if pd.isna(v) else f"{v * 100:.0f}%")
     css = pd.DataFrame("", index=text.index, columns=text.columns)
-    css["z"] = numeric["z"].map(
+    css[text.columns[2]] = numeric["z"].map(
         lambda v: f"color: {theme.TEXT_DIM}" if pd.isna(v)
         else f"color: {theme.GREEN if v > 0 else theme.RED}")
     css["Coverage"] = numeric["Coverage"].map(

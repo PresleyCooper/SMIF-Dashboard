@@ -191,6 +191,26 @@ with theme.panel("Sleeves today"):
         })
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
+# ── priced by interpolation, not observation ──────────────────────────────────
+from smif import validate as _validate            # noqa: E402
+
+interp = _validate.interpolated_positions(book)
+if not interp.empty:
+    worst = interp.reindex(interp["value"].abs().sort_values(
+        ascending=False).index)
+    names = ", ".join(f"{r.symbol} ({theme.money(r.value, 2)})"
+                      for r in worst.head(6).itertuples())
+    theme.note(
+        f"<strong>{len(interp)} position(s) are priced by interpolation, not "
+        f"by an observed close.</strong> Fourteen names the fund once held "
+        f"have no usable Yahoo history — acquired, wound up, or the ticker "
+        f"reissued to a different company — and are valued by log-linear "
+        f"interpolation between the fund's own fills. What survives today is "
+        f"sub-share remnants worth "
+        f"{theme.money(float(interp['value'].abs().sum()), 2)} in total "
+        f"({abs(float(interp['value'].sum())) / nav * 100:.4f}% of net assets): "
+        f"{names}. They are real in the rebuild and swept by the custodian.")
+
 # ── the reconciliation note ───────────────────────────────────────────────────
 gap = data.cash_gap()
 if gap and abs(gap["diff"]) > 1.0:

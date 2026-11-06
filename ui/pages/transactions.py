@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from smif import config, entry, nav, store, validate
+from smif import config, entry, store, validate
 from ui import data, theme
 
 theme.apply_theme()

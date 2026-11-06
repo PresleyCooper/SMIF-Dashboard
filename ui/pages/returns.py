@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from smif import config, returns as returns_mod
+from smif import returns as returns_mod
 from ui import charts, data, theme
 
 theme.apply_theme()

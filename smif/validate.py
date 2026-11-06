@@ -22,7 +22,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from . import config, ledger, prices as price_mod
+from . import config, ledger
 
 
 def check_share_counts(book, holdings: pd.DataFrame,

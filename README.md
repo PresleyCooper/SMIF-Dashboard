@@ -9,7 +9,7 @@ for each sleeve, correlation matrices, a point-in-time factor exposure against
 the S&P 500, and a place to keep the ledger current.
 
 > **Status.** The engine is complete, reconciled to the custodian and covered by
-> 286 tests. `streamlit run app.py` works; **Overview**, **Returns**,
+> 295 tests. `streamlit run app.py` works; **Overview**, **Returns**,
 > **Correlations**, **Factor exposure** and **Transactions** are live. Only
 > Methodology is still a placeholder. `python scripts/check.py` prints the full validation and
 > return report in the meantime.
@@ -42,7 +42,7 @@ smif/            the engine — no Streamlit import anywhere in here
   validate.py      the four reconciliation checks
   engine.py        the one call that runs the pipeline in order
 ui/              everything Streamlit, styled after the Confluence design system
-tests/           286 tests: the rules on synthetic ledgers, then the real regression
+tests/           295 tests: the rules on synthetic ledgers, then the real regression
 scripts/         bootstrap, the factor crawl, and a command-line check
 ```
 

@@ -324,3 +324,100 @@ def test_a_resumed_crawl_keeps_what_the_first_one_fetched(tmp_path, monkeypatch)
     monkeypatch.setattr(fx, "fetch_fundamentals", refuse)
     out = fx.build_snapshot(["AAA", "BBB"], pause=0.0)
     assert out["n"] == 2 and out["fetched"] == 0
+
+
+# ── the index is not its own average constituent ─────────────────────────────
+
+def _skewed_universe(n: int = 300) -> dict[str, dict]:
+    """A universe where a handful of names are far above the rest on Size —
+    the real shape of an equity index."""
+    rng = np.random.default_rng(11)
+    uni = {f"T{i:03d}": {"logMcap": float(v), "roe": float(rng.normal(0.15, 0.05))}
+           for i, v in enumerate(rng.normal(23.0, 1.0, n))}
+    for i in range(5):
+        uni[f"T{i:03d}"]["logMcap"] = 29.0          # the megacaps
+    return uni
+
+
+def test_the_equal_weighted_universe_scores_zero():
+    uni = _skewed_universe()
+    out = fx.exposure({t: 1.0 for t in uni}, uni, uni)
+    size = next(f for f in out["factors"] if f["factor"] == "Size")
+    assert size["z"] == pytest.approx(0.0, abs=0.05)
+
+
+def test_the_cap_weighted_index_does_not_score_zero():
+    """
+    The claim "the S&P 500 is zero by construction" is false and believing it
+    inverts the conclusion. The distribution is built across constituents, one
+    observation each, so what sits at zero is the AVERAGE constituent. A
+    cap-weighted index is dominated by its largest members and scores well
+    above it on Size.
+    """
+    uni = _skewed_universe()
+    weights = {t: (50.0 if t < "T005" else 1.0) for t in uni}
+    bench = fx.benchmark_exposure(uni, weights)
+    size = next(f for f in bench["factors"] if f["factor"] == "Size")
+    assert size["z"] > 1.0
+
+
+def test_active_exposure_measures_the_fund_against_the_index():
+    uni = _skewed_universe()
+    weights = {t: (50.0 if t < "T005" else 1.0) for t in uni}
+    bench = fx.benchmark_exposure(uni, weights)
+
+    # a fund that IS the index must come out flat against it
+    fund = fx.exposure(weights, {t: uni[t] for t in weights}, uni)
+    active = fx.active_exposure(fund, bench)
+    size = next(f for f in active["factors"] if f["factor"] == "Size")
+    assert size["z"] == pytest.approx(0.0, abs=1e-6)
+    assert size["absolute_z"] > 1.0          # while still large in absolute terms
+
+
+def test_active_exposure_keeps_both_numbers():
+    uni = _skewed_universe()
+    weights = {t: (50.0 if t < "T005" else 1.0) for t in uni}
+    bench = fx.benchmark_exposure(uni, weights)
+    fund = fx.exposure({"T000": 1.0}, {"T000": uni["T000"]}, uni)
+    active = fx.active_exposure(fund, bench)
+    m = next(x for x in active["metrics"] if x["key"] == "logMcap")
+    assert m["absolute_z"] is not None and m["benchmark_z"] is not None
+    assert m["z"] == pytest.approx(m["absolute_z"] - m["benchmark_z"], abs=1e-6)
+
+
+def test_active_exposure_leaves_an_unscorable_metric_as_none():
+    uni = _skewed_universe()
+    weights = {t: 1.0 for t in uni}
+    bench = fx.benchmark_exposure(uni, weights)
+    fund = fx.exposure({"X": 1.0}, {"X": {}}, uni)
+    active = fx.active_exposure(fund, bench)
+    assert all(m["z"] is None for m in active["metrics"])
+
+
+# ── the chart's axis ─────────────────────────────────────────────────────────
+
+def test_a_small_active_tilt_still_fills_the_chart():
+    """A fixed +/-2.5 sigma axis collapses every active bar onto the zero
+    line, and a chart that says nothing is worse than no chart."""
+    from ui import charts
+    scale, step = charts._nice_scale([0.03, 0.10, -0.10, 0.06, 0.09])
+    assert scale <= 0.6
+    assert step <= 0.2
+
+
+def test_a_large_absolute_tilt_is_not_clipped():
+    from ui import charts
+    scale, _step = charts._nice_scale([1.78, 0.62, 0.16, -0.22, 0.09])
+    assert scale >= 1.78
+
+
+def test_a_book_with_no_tilt_is_not_magnified_into_one():
+    from ui import charts
+    scale, _step = charts._nice_scale([0.001, -0.002, 0.0])
+    assert scale >= 0.5
+
+
+def test_the_axis_ignores_metrics_that_could_not_be_scored():
+    from ui import charts
+    scale, _step = charts._nice_scale([None, 0.2, None])
+    assert scale >= 0.5

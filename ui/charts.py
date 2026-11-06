@@ -227,7 +227,26 @@ def _esc(s) -> str:
     return html.escape(str(s), quote=True)
 
 
-def factor_exposure_svg(payload: dict, *, show_metrics: bool = True) -> str:
+def _nice_scale(values: list[float], floor: float = 0.5) -> tuple[float, float]:
+    """
+    An axis maximum and gridline step that fit the data.
+
+    A fixed +/-2.5 sigma axis is right for absolute scores, which routinely run
+    past two sigma, and useless for active ones, which cluster inside a tenth
+    of a sigma — every bar collapses onto the zero line and the chart says
+    nothing. The floor stops a book that genuinely has no tilt from being
+    magnified into one.
+    """
+    peak = max((abs(v) for v in values if v is not None), default=0.0)
+    z_max = max(floor, peak * 1.25)
+    for step in (0.05, 0.1, 0.2, 0.25, 0.5, 1.0, 2.0):
+        if z_max / step <= 5:
+            break
+    return z_max, step
+
+
+def factor_exposure_svg(payload: dict, *, show_metrics: bool = True,
+                        z_max: float | None = None) -> str:
     """
     The five-group factor chart, in standard deviations against the S&P 500.
 
@@ -246,23 +265,32 @@ def factor_exposure_svg(payload: dict, *, show_metrics: bool = True) -> str:
     zero_y = _PAD_T + plot_h / 2
     group_w = plot_w / len(groups)
 
+    every = ([g.get("z") for g in groups]
+             + [m.get("z") for m in metrics if m.get("factor")])
+    scale, step = _nice_scale(every) if z_max is None else (z_max, _Z_MAX / 2.5)
+    decimals = 0 if step >= 1 else (1 if step >= 0.1 else 2)
+
     def y_of(z: float) -> float:
-        z = max(-_Z_MAX, min(_Z_MAX, z))
-        return zero_y - (z / _Z_MAX) * (plot_h / 2)
+        z = max(-scale, min(scale, z))
+        return zero_y - (z / scale) * (plot_h / 2)
 
     out = [f'<svg viewBox="0 0 {_W} {_H}" style="width:100%;min-width:620px" '
            f'role="img" aria-label="Portfolio factor exposure versus the '
            f'S&amp;P 500" xmlns="http://www.w3.org/2000/svg">']
 
-    # sigma gridlines
-    for g in (-2, -1, 1, 2):
+    # sigma gridlines, at whatever step fits the scale
+    ticks, v = [], step
+    while v < scale * 0.999:
+        ticks += [v, -v]
+        v += step
+    for g in sorted(ticks):
         y = y_of(g)
         out.append(
             f'<line x1="{_PAD_L}" x2="{_W - _PAD_R}" y1="{y:.1f}" y2="{y:.1f}" '
             f'stroke="{T.BORDER}" stroke-dasharray="3 4" stroke-width="1"/>'
             f'<text x="{_PAD_L - 7}" y="{y + 3.5:.1f}" text-anchor="end" '
             f'font-size="9.5" fill="{T.TEXT_DIM}" '
-            f'font-family="DM Mono, monospace">{g:+d}&#963;</text>')
+            f'font-family="DM Mono, monospace">{g:+.{decimals}f}&#963;</text>')
 
     # direction hints and the zero line
     out.append(
