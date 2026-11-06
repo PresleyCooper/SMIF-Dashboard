@@ -80,7 +80,20 @@ theme.tiles([
              else f"{age:.0f} days old" if age is not None else "unknown")},
 ])
 
-if stale:
+if snapshot.get("status") == "partial":
+    # build_snapshot() checkpoints every 25 names so a crawl that dies at
+    # minute seven does not lose everything. The side effect is that a crawl
+    # still running is perfectly readable — and would otherwise be presented
+    # as a finished one, with a coverage figure that is really just "how far
+    # the alphabet got".
+    theme.note(
+        f"<strong>This crawl is incomplete.</strong> {snapshot.get('n', 0)} "
+        f"names are in the snapshot so far, written as a checkpoint while the "
+        f"crawl is still running. The scores below are computed only from the "
+        f"holdings already covered, so the coverage figure reflects the "
+        f"crawl's progress rather than the data's true availability. Let it "
+        f"finish and reload.")
+elif stale:
     theme.note(
         f"<strong>This snapshot is {age:.0f} days old.</strong> Fundamentals "
         f"are crawled, not live, and the scores above are only as current as "

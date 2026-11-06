@@ -9,8 +9,8 @@ for each sleeve, correlation matrices, a point-in-time factor exposure against
 the S&P 500, and a place to keep the ledger current.
 
 > **Status.** The engine is complete, reconciled to the custodian and covered by
-> 201 tests. `streamlit run app.py` works; the **Overview**, **Returns** and
-> **Correlations** pages are live. Factor exposure, Transactions and
+> 239 tests. `streamlit run app.py` works; the **Overview**, **Returns**,
+> **Correlations** and **Factor exposure** pages are live. Transactions and
 > Methodology are still placeholders. `python scripts/check.py` prints the full validation and
 > return report in the meantime.
 
@@ -41,7 +41,7 @@ smif/            the engine — no Streamlit import anywhere in here
   validate.py      the four reconciliation checks
   engine.py        the one call that runs the pipeline in order
 ui/              everything Streamlit, styled after the Confluence design system
-tests/           201 tests: the rules on synthetic ledgers, then the real regression
+tests/           239 tests: the rules on synthetic ledgers, then the real regression
 scripts/         bootstrap, the factor crawl, and a command-line check
 ```
 
@@ -66,6 +66,13 @@ It takes a few minutes once; after that a refresh only asks for the new days.
 
 ```bash
 streamlit run app.py
+```
+
+The factor page needs one more crawl, which takes about seven minutes and is
+then cached for a month:
+
+```bash
+python scripts/build_factors.py
 ```
 
 ```bash

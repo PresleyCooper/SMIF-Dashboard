@@ -269,3 +269,58 @@ def test_an_old_snapshot_is_stale():
     old = (pd.Timestamp.utcnow().tz_localize(None)
            - pd.Timedelta(days=config.FUNDAMENTALS_TTL_DAYS + 5)).isoformat()
     assert fx.is_stale({"metrics": {}, "asof": old})
+
+
+def test_a_checkpointed_crawl_is_marked_partial(tmp_path, monkeypatch):
+    """
+    build_snapshot() checkpoints so a crawl that dies mid-way does not lose
+    everything. The cost is that a crawl still RUNNING is perfectly readable,
+    and would be presented as finished — with a coverage figure that is really
+    just how far through the alphabet it got. The status field is what lets
+    the page say so.
+    """
+    monkeypatch.setattr(config, "FUNDAMENTALS_CACHE", tmp_path / "snap.json")
+    monkeypatch.setattr(fx, "fetch_fundamentals",
+                        lambda t: {"logMcap": 1.0, "roe": 0.1, "earnYield": 0.05})
+    tickers = [f"T{i:03d}" for i in range(30)]
+    fx.build_snapshot(tickers, pause=0.0, checkpoint_every=5)
+
+    final = fx.load_snapshot()
+    assert final["status"] == "ok"
+    assert final["n"] == 30
+
+
+def test_a_crawl_interrupted_mid_way_leaves_a_readable_partial(tmp_path,
+                                                               monkeypatch):
+    monkeypatch.setattr(config, "FUNDAMENTALS_CACHE", tmp_path / "snap.json")
+
+    calls = {"n": 0}
+
+    def flaky(ticker):
+        calls["n"] += 1
+        if calls["n"] > 12:
+            raise KeyboardInterrupt("crawl stopped")
+        return {"logMcap": 1.0, "roe": 0.1, "earnYield": 0.05}
+
+    monkeypatch.setattr(fx, "fetch_fundamentals", flaky)
+    with pytest.raises(KeyboardInterrupt):
+        fx.build_snapshot([f"T{i:03d}" for i in range(30)], pause=0.0,
+                          checkpoint_every=5)
+
+    partial = fx.load_snapshot()
+    assert partial["status"] == "partial"
+    assert 0 < partial["n"] < 30
+
+
+def test_a_resumed_crawl_keeps_what_the_first_one_fetched(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "FUNDAMENTALS_CACHE", tmp_path / "snap.json")
+    monkeypatch.setattr(fx, "fetch_fundamentals",
+                        lambda t: {"logMcap": 1.0, "roe": 0.1, "earnYield": 0.05})
+    fx.build_snapshot(["AAA", "BBB"], pause=0.0)
+
+    def refuse(ticker):
+        raise AssertionError(f"{ticker} should have been read from the cache")
+
+    monkeypatch.setattr(fx, "fetch_fundamentals", refuse)
+    out = fx.build_snapshot(["AAA", "BBB"], pause=0.0)
+    assert out["n"] == 2 and out["fetched"] == 0
